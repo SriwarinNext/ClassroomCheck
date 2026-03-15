@@ -549,8 +549,15 @@
                             subjectName: result.value.subject
                         };
                         
-                        // ส่งไปบันทึกลง Google Sheet
-                        await fetchAPI('addClass', newClass);
+                        // ป้องกัน Google Sheets แปลงชื่อห้อง (เช่น 4/1) เป็นวันที่และเวลา โดยการใส่ ' นำหน้า
+                        const classToSave = {
+                            ...newClass,
+                            name: "'" + newClass.name,
+                            subjectCode: "'" + newClass.subjectCode
+                        };
+                        
+                        // ส่งไปบันทึกลง Google Sheet ด้วยข้อมูลที่ใส่ ' แล้ว
+                        await fetchAPI('addClass', classToSave);
 
                         AppState.classes.push(newClass);
                         AppState.students[newId] = [];
@@ -730,10 +737,16 @@
                 if (result.isConfirmed) {
                     Swal.fire({ title: 'กำลังบันทึกข้อมูล...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
                     try {
+                        // ป้องกัน Google Sheets ตัดเลข 0 ข้างหน้ารหัสทิ้ง หรือแปลงเป็นวันที่ โดยการใส่ ' นำหน้ารหัส
+                        const studentsToSave = result.value.map(std => ({
+                            ...std,
+                            stdCode: "'" + std.stdCode
+                        }));
+
                         // ส่งไปบันทึกลง Google Sheet
                         await fetchAPI('addStudents', { 
                             classId: AppState.currentClassId, 
-                            students: result.value 
+                            students: studentsToSave 
                         });
 
                         const students = AppState.students[AppState.currentClassId] || [];
