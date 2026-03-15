@@ -334,7 +334,7 @@
          * ------------------------------------------------------------------------
          */
         // 🚨 สำคัญ: นำ URL ที่ได้จากการ Deploy Google Apps Script (Webhook) ของคุณมาใส่ที่นี่!
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxKw-1Gbm4qLXlY5gnQZQRohtAyA3ItDGZOgtowmiG3XtF-jNDYdYDAc-4HwAjZa_jGRQ/exec";
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz2AzngmwGhH7pJffLISDyuTkX0SMEgHOGhKYI4w9RCPPqlZZltJ6gfWz9UBKZ5G4yb/exec";
         
         // Application State (เก็บข้อมูลชั่วคราวขณะใช้งานเว็บ)
         let AppState = {
@@ -537,18 +537,28 @@
                     if (!name) return Swal.showValidationMessage('กรุณากรอกชื่อห้องเรียน');
                     return { name, code, subject };
                 }
-            }).then((result) => {
+            }).then(async (result) => {
                 if (result.isConfirmed) {
-                    const newId = 'c' + Date.now();
-                    AppState.classes.push({
-                        id: newId,
-                        name: result.value.name,
-                        subjectCode: result.value.code,
-                        subjectName: result.value.subject
-                    });
-                    AppState.students[newId] = [];
-                    renderDashboard();
-                    Swal.fire({icon: 'success', title: 'สร้างห้องเรียนสำเร็จ', timer: 1500, showConfirmButton: false});
+                    Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
+                    try {
+                        const newId = 'c' + Date.now();
+                        const newClass = {
+                            id: newId,
+                            name: result.value.name,
+                            subjectCode: result.value.code,
+                            subjectName: result.value.subject
+                        };
+                        
+                        // ส่งไปบันทึกลง Google Sheet
+                        await fetchAPI('addClass', newClass);
+
+                        AppState.classes.push(newClass);
+                        AppState.students[newId] = [];
+                        renderDashboard();
+                        Swal.fire({icon: 'success', title: 'สร้างห้องเรียนสำเร็จ', timer: 1500, showConfirmButton: false});
+                    } catch (error) {
+                        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกห้องเรียนได้', 'error');
+                    }
                 }
             });
         }
@@ -562,13 +572,21 @@
                 confirmButtonColor: '#ef4444',
                 confirmButtonText: 'ใช่, ลบเลย',
                 cancelButtonText: 'ยกเลิก'
-            }).then((result) => {
+            }).then(async (result) => {
                 if (result.isConfirmed) {
-                    AppState.classes = AppState.classes.filter(c => c.id !== id);
-                    delete AppState.students[id];
-                    delete AppState.attendanceHistory[id];
-                    renderDashboard();
-                    Swal.fire({icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false});
+                    Swal.fire({ title: 'กำลังลบข้อมูล...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
+                    try {
+                        // ส่งคำสั่งลบไปที่ Google Sheet
+                        await fetchAPI('deleteClass', { id: id });
+
+                        AppState.classes = AppState.classes.filter(c => c.id !== id);
+                        delete AppState.students[id];
+                        delete AppState.attendanceHistory[id];
+                        renderDashboard();
+                        Swal.fire({icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false});
+                    } catch (error) {
+                        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถลบข้อมูลได้', 'error');
+                    }
                 }
             });
         }
@@ -708,21 +726,32 @@
                     
                     return newStudents;
                 }
-            }).then((result) => {
+            }).then(async (result) => {
                 if (result.isConfirmed) {
-                    const students = AppState.students[AppState.currentClassId] || [];
-                    
-                    // นำนักเรียนใหม่ไปต่อท้ายนักเรียนเดิม
-                    AppState.students[AppState.currentClassId] = [...students, ...result.value];
-                    
-                    renderStudentsTab();
-                    
-                    Swal.fire({
-                        icon: 'success', 
-                        title: `เพิ่มนักเรียนสำเร็จ ${result.value.length} คน`, 
-                        timer: 2000, 
-                        showConfirmButton: false
-                    });
+                    Swal.fire({ title: 'กำลังบันทึกข้อมูล...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
+                    try {
+                        // ส่งไปบันทึกลง Google Sheet
+                        await fetchAPI('addStudents', { 
+                            classId: AppState.currentClassId, 
+                            students: result.value 
+                        });
+
+                        const students = AppState.students[AppState.currentClassId] || [];
+                        
+                        // นำนักเรียนใหม่ไปต่อท้ายนักเรียนเดิม
+                        AppState.students[AppState.currentClassId] = [...students, ...result.value];
+                        
+                        renderStudentsTab();
+                        
+                        Swal.fire({
+                            icon: 'success', 
+                            title: `เพิ่มนักเรียนสำเร็จ ${result.value.length} คน`, 
+                            timer: 2000, 
+                            showConfirmButton: false
+                        });
+                    } catch (error) {
+                        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถบันทึกรายชื่อได้', 'error');
+                    }
                 }
             });
         }
@@ -735,10 +764,19 @@
                 confirmButtonColor: '#ef4444',
                 confirmButtonText: 'ลบ',
                 cancelButtonText: 'ยกเลิก'
-            }).then((result) => {
+            }).then(async (result) => {
                 if (result.isConfirmed) {
-                    AppState.students[AppState.currentClassId] = AppState.students[AppState.currentClassId].filter(s => s.id !== stdId);
-                    renderStudentsTab();
+                    Swal.fire({ title: 'กำลังลบข้อมูล...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
+                    try {
+                        // ส่งคำสั่งลบไปที่ Google Sheet
+                        await fetchAPI('deleteStudent', { stdId: stdId });
+
+                        AppState.students[AppState.currentClassId] = AppState.students[AppState.currentClassId].filter(s => s.id !== stdId);
+                        renderStudentsTab();
+                        Swal.fire({icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false});
+                    } catch (error) {
+                        Swal.fire('ข้อผิดพลาด', 'ไม่สามารถลบข้อมูลได้', 'error');
+                    }
                 }
             });
         }
