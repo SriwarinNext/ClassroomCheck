@@ -66,7 +66,7 @@
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <i class="fa-regular fa-envelope text-gray-400"></i>
                         </div>
-                        <input type="email" id="loginEmail" required class="pl-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" placeholder="teacher@school.ac.th" value="teacher@sriwarinschool.ac.th">
+                        <input type="email" id="loginEmail" required class="pl-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" placeholder="Mail@sriwarinschool.ac.th">
                     </div>
                 </div>
                 <div class="mb-6">
@@ -75,7 +75,10 @@
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                             <i class="fa-solid fa-lock text-gray-400"></i>
                         </div>
-                        <input type="password" id="loginPass" required class="pl-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" placeholder="••••••••" value="123456">
+                        <input type="password" id="loginPass" required class="pl-10 pr-10 w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" placeholder="••••••••">
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-primary-500 transition-colors" onclick="togglePassword()">
+                            <i class="fa-regular fa-eye" id="eyeIcon"></i>
+                        </div>
                     </div>
                 </div>
                 <button type="submit" class="w-full bg-gradient-to-r from-primary-500 to-secondary-500 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
@@ -148,9 +151,12 @@
                             <h2 id="detailClassName" class="text-2xl font-bold text-gray-800">ชื่อห้องเรียน</h2>
                             <p id="detailSubjectName" class="text-secondary-600 font-medium text-sm"></p>
                         </div>
-                        <div class="mt-4 md:mt-0 flex space-x-2">
+                        <div class="mt-4 md:mt-0 flex flex-wrap gap-2 justify-end">
                             <button onclick="openQRScanner()" class="bg-secondary-500 hover:bg-secondary-600 text-white px-4 py-2 rounded-lg shadow transition-colors text-sm flex items-center">
                                 <i class="fa-solid fa-qrcode mr-2"></i> สแกน QR
+                            </button>
+                            <button onclick="refreshData()" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg shadow transition-colors text-sm flex items-center">
+                                <i class="fa-solid fa-sync-alt mr-2"></i> ซิงค์
                             </button>
                             <button onclick="exportToExcel()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg shadow transition-colors text-sm flex items-center">
                                 <i class="fa-solid fa-file-excel mr-2"></i> ส่งออก Excel
@@ -346,7 +352,7 @@
          * ------------------------------------------------------------------------
          */
         // 🚨 สำคัญ: นำ URL ที่ได้จากการ Deploy Google Apps Script (Webhook) ของคุณมาใส่ที่นี่!
-        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz2AzngmwGhH7pJffLISDyuTkX0SMEgHOGhKYI4w9RCPPqlZZltJ6gfWz9UBKZ5G4yb/exec";
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz3rBmvuad7z0fgjJ2_tGX_skmJo5ftGqSzKVnXoqjOApkODokanNK8z_1M6-BIJ8lxBA/exec";
         
         // Application State (เก็บข้อมูลชั่วคราวขณะใช้งานเว็บ)
         let AppState = {
@@ -369,6 +375,25 @@
 
         // ตั้งค่าวันที่ปัจจุบันในฟอร์ม
         document.getElementById('attendanceDate').valueAsDate = new Date();
+
+        /**
+         * ------------------------------------------------------------------------
+         * UI HELPERS
+         * ------------------------------------------------------------------------
+         */
+        function togglePassword() {
+            const passInput = document.getElementById('loginPass');
+            const eyeIcon = document.getElementById('eyeIcon');
+            if (passInput.type === 'password') {
+                passInput.type = 'text';
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
+            } else {
+                passInput.type = 'password';
+                eyeIcon.classList.remove('fa-eye-slash');
+                eyeIcon.classList.add('fa-eye');
+            }
+        }
 
         /**
          * ------------------------------------------------------------------------
@@ -476,6 +501,32 @@
             } catch (error) {
                 console.error("Error loading data:", error);
                 Swal.fire('ข้อผิดพลาด', 'ไม่สามารถดึงข้อมูลได้ กรุณาตรวจสอบสิทธิ์การเข้าถึงฐานข้อมูล', 'error');
+            }
+        }
+
+        // ฟังก์ชันสำหรับปุ่มซิงค์ ดึงข้อมูลใหม่โดยไม่ต้องล็อกอินใหม่
+        async function refreshData() {
+            Swal.fire({ title: 'กำลังดึงข้อมูลล่าสุด...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() }});
+            try {
+                const dataFromSheet = await fetchAPI('loadInitialData', {});
+                
+                AppState.classes = dataFromSheet.classes || [];
+                AppState.students = dataFromSheet.students || {};
+                AppState.attendanceHistory = dataFromSheet.attendanceHistory || {};
+                
+                // ถ้ายังอยู่ในหน้าของห้องเรียนใดห้องเรียนหนึ่ง ให้รีเฟรชแท็บนั้นด้วย
+                if (AppState.currentClassId) {
+                    if (!document.getElementById('content-attendance').classList.contains('hide')) renderAttendanceTab();
+                    if (!document.getElementById('content-students').classList.contains('hide')) renderStudentsTab();
+                    if (!document.getElementById('content-stats').classList.contains('hide')) renderStatsTab();
+                } else {
+                    renderDashboard();
+                }
+
+                Swal.fire({icon: 'success', title: 'อัปเดตข้อมูลสำเร็จ', timer: 1500, showConfirmButton: false});
+            } catch (error) {
+                console.error(error);
+                Swal.fire('ข้อผิดพลาด', 'ไม่สามารถซิงค์ข้อมูลได้', 'error');
             }
         }
 
